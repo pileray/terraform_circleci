@@ -1,0 +1,57 @@
+version: '2.1'
+parameters:
+  continue-terraform:
+    type: boolean
+    default: false
+orbs:
+  terraform: circleci/terraform@3.1.0
+set_backend: &set_backend
+  run:
+    command: |
+      mkdir ~/.aws/
+      echo  -e "[menta-terraform]\
+      aws_access_key_id = ${AWS_ACCESS_KEY_ID}\
+      aws_secret_access_key = ${AWS_SECRET_ACCESS_KEY}" > ~/.aws/credentials
+jobs:
+  terraform_plan:
+    executor: terraform/default
+    steps:
+      - checkout
+      - *set_backend
+      - terraform/init:
+          backend: true
+          path: ./terraform
+      - terraform/plan:
+          path: ./terraform
+  terraform_apply:
+    executor: terraform/default
+    steps:
+      - checkout
+      - *set_backend
+      - terraform/init:
+          backend: true
+          path: ./terraform
+      - terraform/apply:
+          path: ./terraform
+workflows:
+  deploy_infrastructure:
+    when: << pipeline.parameters.continue-terraform >>
+    jobs:
+      - terraform/validate:
+          checkout: true
+          context: terraform
+      - terraform_plan:
+          context: 
+            - terraform
+            - terraform_rds_vars
+          requires:
+            - terraform/validate
+      - terraform_apply:
+          context: 
+            - terraform
+            - terraform_rds_vars
+          filters:
+            branches:
+              only: main
+          requires:
+            - terraform_plan
